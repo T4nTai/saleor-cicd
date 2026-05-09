@@ -1,0 +1,50 @@
+stages:
+  - validate
+  - plan
+  - apply
+  - destroy
+
+variables:
+  TF_ROOT: "terraform"
+
+default:
+  image:
+    name: hashicorp/terraform:1.12.0
+    entrypoint: [""]
+
+before_script:
+  - cd ${TF_ROOT}
+  - terraform init
+      -backend-config="bucket=saleor-terraform-state-nguyentanan"
+      -backend-config="key=saleor-infrastructure/terraform.tfstate"
+      -backend-config="region=us-east-1"
+
+validate:
+  stage: validate
+  script:
+    - terraform validate
+  only:
+    - main
+
+plan:
+  stage: plan
+  script:
+    - terraform plan -var-file=terraform.tfvars
+  only:
+    - main
+
+apply:
+  stage: apply
+  script:
+    - terraform apply -var-file=terraform.tfvars --auto-approve
+  only:
+    - main
+  when: manual
+
+destroy:
+  stage: destroy
+  script:
+    - terraform destroy -var-file=terraform.tfvars --auto-approve
+  only:
+    - main
+  when: manual

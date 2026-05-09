@@ -1,0 +1,37 @@
+severity:
+  - CRITICAL
+  - HIGH
+
+# Fail pipeline on CRITICAL, warn on HIGH
+exit-code: 1
+
+# Scan targets
+scan:
+  scanners:
+    - vuln
+    - secret
+    - misconfig
+
+# Output
+format: sarif
+
+# Ignore unfixable vulns
+ignore-unfixed: false
+
+# Skip dev/test dependencies
+skip-dirs:
+  - "node_modules"
+  - ".next"
+  - "__pycache__"
+  - ".pytest_cache"
+
+# Timeout per scan
+timeout: 10m0s
+
+# Secret detection - prevent leaking credentials
+secret:
+  config: trivy/secret.yaml
+
+# Vulnerability DB cache
+cache:
+  dir: /tmp/trivy-cache

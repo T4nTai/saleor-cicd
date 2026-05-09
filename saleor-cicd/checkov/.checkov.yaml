@@ -1,0 +1,47 @@
+directory:
+  - terraform
+
+framework:
+  - terraform
+
+# Fail on these severities
+soft-fail-on:
+  - LOW
+  - MEDIUM
+
+# Block pipeline on these
+hard-fail-on:
+  - HIGH
+  - CRITICAL
+
+# Skip rules that don't apply to this project
+skip-check:
+  # EKS public endpoint: required for CI to reach cluster (restrict via SG instead)
+  - CKV_AWS_58
+  # RDS skip final snapshot: dev/staging only
+  - CKV_AWS_293
+  # S3 ACL: bucket is private, managed by bucket policy
+  - CKV_AWS_20
+  # Require specific checks
+check:
+  - CKV_AWS_111   # IAM wildcard action
+  - CKV_AWS_40    # IAM policy on user directly
+  - CKV_AWS_7     # KMS rotation
+  - CKV_AWS_17    # RDS publicly accessible
+  - CKV_AWS_23    # Security group no description
+  - CKV_AWS_24    # Security group unrestricted ssh
+  - CKV_AWS_25    # Security group unrestricted rdp
+  - CKV_AWS_131   # ALB drop http headers
+  - CKV_AWS_91    # Cloudtrail enabled
+  - CKV2_AWS_5    # SG not attached
+  - CKV_AWS_18    # S3 access logging
+  - CKV_AWS_19    # S3 encryption
+  - CKV_AWS_21    # S3 versioning
+
+output:
+  - cli
+  - sarif
+
+output-file-path: reports/
+
+compact: true

@@ -1,0 +1,23 @@
+{
+  "target": "http://localhost:8000/graphql/",
+  "checks": {
+    "introspection": true,
+    "field_suggestions": true,
+    "batch_query_limit": true,
+    "alias_limit": true,
+    "directive_overloading": true,
+    "circular_introspection": true,
+    "get_method_query_csrf": true,
+    "post_method_query_csrf": true,
+    "deep_recursion": true
+  },
+  "thresholds": {
+    "depth_limit": 10,
+    "batch_limit": 10,
+    "alias_limit": 10
+  },
+  "output": {
+    "format": "json",
+    "file": "reports/graphql-cop.json"
+  }
+}

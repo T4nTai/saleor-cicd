@@ -1,0 +1,497 @@
+stages:
+  - scan
+  - audit
+  - sast
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  REGISTRY: ghcr.io
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  # Set trong GitLab → Settings → CI/CD → Variables:
+  #   VAULT_ADDR, VAULT_TOKEN, SONAR_HOST_URL
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Hidden jobs
+# ─────────────────────────────────────────────────────────────────────────────
+
+.vault-setup:
+  before_script:
+    - |
+      if command -v apk >/dev/null 2>&1; then
+        apk add --no-cache curl unzip
+      else
+        apt-get update -qq && apt-get install -y -qq curl unzip
+      fi
+    - |
+      VAULT_VER="1.17.6"
+      curl -sSLo /tmp/vault.zip \
+        "https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip"
+      unzip -qo /tmp/vault.zip -d /usr/local/bin/
+      chmod +x /usr/local/bin/vault
+
+.docker-login:
+  before_script:
+    - |
+      if command -v apk >/dev/null 2>&1; then
+        apk add --no-cache curl unzip
+      else
+        apt-get update -qq && apt-get install -y -qq curl unzip
+      fi
+    - |
+      VAULT_VER="1.17.6"
+      curl -sSLo /tmp/vault.zip \
+        "https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip"
+      unzip -qo /tmp/vault.zip -d /usr/local/bin/
+      chmod +x /usr/local/bin/vault
+    - |
+      REGISTRY_PASSWORD=$(vault kv get -field=registry_password secret/saleor/ci)
+      echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" \
+        -u "$CI_PROJECT_NAMESPACE" --password-stdin
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCAN — Không cần external service, chạy trên mọi branch
+# ─────────────────────────────────────────────────────────────────────────────
+
+checkov:
+  stage: scan
+  image:
+    name: bridgecrew/checkov:latest
+    entrypoint: [""]
+  script:
+    - checkov -d saleor-infrastructure/terraform --framework terraform
+        --soft-fail-on LOW,MEDIUM --hard-fail-on HIGH,CRITICAL
+        --skip-check CKV_AWS_58,CKV_AWS_293
+        --output cli
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor-infrastructure/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-infrastructure/**/*]
+
+trivy:backend:
+  stage: scan
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy fs --severity CRITICAL,HIGH --exit-code 0 --format table saleor/
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor/**/*]
+
+trivy:dashboard:
+  stage: scan
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy fs --severity CRITICAL,HIGH --exit-code 0 --format table saleor-dashboard/
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor-dashboard/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-dashboard/**/*]
+
+trivy:storefront:
+  stage: scan
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy fs --severity CRITICAL,HIGH --exit-code 0 --format table saleor-storefront/
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor-storefront/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-storefront/**/*]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDIT — Dependency vulnerability scan
+# ─────────────────────────────────────────────────────────────────────────────
+
+pip-audit:
+  stage: audit
+  image: python:3.12-slim
+  script:
+    - pip install pip-audit --quiet
+    - pip-audit -r saleor/requirements.txt --severity high || true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor/requirements*.txt]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor/requirements*.txt]
+
+audit:dashboard:
+  stage: audit
+  image: node:20-alpine
+  before_script:
+    - npm install -g pnpm@10 --quiet
+  script:
+    - cd saleor-dashboard && pnpm install --frozen-lockfile
+    - cd saleor-dashboard && pnpm audit --audit-level=high || true
+  cache:
+    key: pnpm-dashboard-$CI_COMMIT_REF_SLUG
+    paths: [saleor-dashboard/node_modules/.cache]
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor-dashboard/pnpm-lock.yaml]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-dashboard/pnpm-lock.yaml]
+
+audit:storefront:
+  stage: audit
+  image: node:20-alpine
+  before_script:
+    - npm install -g pnpm@9 --quiet
+  script:
+    - cd saleor-storefront && pnpm install --frozen-lockfile
+    - cd saleor-storefront && pnpm audit --audit-level=high || true
+  cache:
+    key: pnpm-storefront-$CI_COMMIT_REF_SLUG
+    paths: [saleor-storefront/node_modules/.cache]
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor-storefront/pnpm-lock.yaml]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-storefront/pnpm-lock.yaml]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SAST — SonarQube, graphql-cop, terraform validate
+# ─────────────────────────────────────────────────────────────────────────────
+
+sonarqube:backend:
+  stage: sast
+  extends: .vault-setup
+  image: sonarsource/sonar-scanner-cli:latest
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+  script:
+    - SONAR_TOKEN=$(vault kv get -field=sonar_token secret/saleor/ci)
+    - >
+      sonar-scanner
+      -Dsonar.projectKey=saleor-backend
+      -Dsonar.sources=saleor
+      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.python.version=3.12
+      -Dsonar.exclusions="**/tests/**,**/migrations/**,**/static/**"
+      -Dsonar.python.coverage.reportPaths=saleor/coverage.xml
+  cache:
+    key: sonar-backend
+    paths: [.sonar/cache]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+      changes: [saleor/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor/**/*]
+
+sonarqube:dashboard:
+  stage: sast
+  extends: .vault-setup
+  image: sonarsource/sonar-scanner-cli:latest
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+  script:
+    - SONAR_TOKEN=$(vault kv get -field=sonar_token secret/saleor/ci)
+    - >
+      sonar-scanner
+      -Dsonar.projectKey=saleor-dashboard
+      -Dsonar.sources=saleor-dashboard/src
+      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.javascript.lcov.reportPaths=saleor-dashboard/coverage/lcov.info
+      -Dsonar.exclusions="**/*.test.ts,**/*.test.tsx,**/node_modules/**"
+  cache:
+    key: sonar-dashboard
+    paths: [.sonar/cache]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+      changes: [saleor-dashboard/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-dashboard/**/*]
+
+sonarqube:storefront:
+  stage: sast
+  extends: .vault-setup
+  image: sonarsource/sonar-scanner-cli:latest
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+  script:
+    - SONAR_TOKEN=$(vault kv get -field=sonar_token secret/saleor/ci)
+    - >
+      sonar-scanner
+      -Dsonar.projectKey=saleor-storefront
+      -Dsonar.sources=saleor-storefront/src
+      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.exclusions="**/*.test.ts,**/*.test.tsx,**/.next/**,**/node_modules/**"
+  cache:
+    key: sonar-storefront
+    paths: [.sonar/cache]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+      changes: [saleor-storefront/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-storefront/**/*]
+
+graphql-cop:
+  stage: sast
+  image: python:3.12-slim
+  services:
+    - name: postgres:15-alpine
+      alias: postgres
+    - name: redis:7-alpine
+      alias: redis
+    - name: ghcr.io/saleor/saleor:latest
+      alias: saleor-api
+  variables:
+    POSTGRES_DB: saleor
+    POSTGRES_USER: saleor
+    POSTGRES_PASSWORD: saleor
+    DATABASE_URL: "postgres://saleor:saleor@postgres/saleor"
+    REDIS_URL: "redis://redis:6379/0"
+    SECRET_KEY: "ci-only-not-for-production"
+    ALLOWED_HOSTS: "*"
+    DEFAULT_FROM_EMAIL: "ci@test.com"
+    DEBUG: "True"
+  script:
+    - pip install graphql-cop --quiet
+    - mkdir -p reports
+    - |
+      for i in $(seq 1 36); do
+        curl -sf http://saleor-api:8000/health/ && break
+        echo "waiting for API... ($i/36)"; sleep 5
+        [ "$i" = "36" ] && echo "Timeout" && exit 1
+      done
+    - graphql-cop -t http://saleor-api:8000/graphql/ -o json > reports/graphql-cop.json || true
+    - python -m json.tool reports/graphql-cop.json
+  artifacts:
+    paths: [reports/graphql-cop.json]
+    expire_in: 7 days
+    when: always
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+      changes: [saleor/**/*]
+  allow_failure: true
+
+terraform:validate:
+  stage: sast
+  extends: .vault-setup
+  image:
+    name: hashicorp/terraform:1.8
+    entrypoint: [""]
+  script:
+    - |
+      export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
+      export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
+    - cd saleor-infrastructure/terraform
+    - terraform init -backend=false
+    - terraform validate
+    - terraform fmt -check -recursive
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor-infrastructure/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-infrastructure/**/*]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUILD — Docker image + Trivy image scan + terraform plan
+# ─────────────────────────────────────────────────────────────────────────────
+
+build:backend:
+  stage: build
+  extends: .docker-login
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker build -t "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-backend:$IMAGE_TAG" saleor/
+    - |
+      docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+        aquasec/trivy:latest image --severity CRITICAL,HIGH --exit-code 1 \
+        "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-backend:$IMAGE_TAG"
+    - docker push "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-backend:$IMAGE_TAG"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes: [saleor/**/*]
+
+build:dashboard:
+  stage: build
+  extends: .docker-login
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - >
+      docker build
+      --build-arg API_URL=http://localhost:8000/graphql/
+      -t "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-dashboard:$IMAGE_TAG"
+      saleor-dashboard/
+    - |
+      docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+        aquasec/trivy:latest image --severity CRITICAL,HIGH --exit-code 1 \
+        "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-dashboard:$IMAGE_TAG"
+    - docker push "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-dashboard:$IMAGE_TAG"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes: [saleor-dashboard/**/*]
+
+build:storefront:
+  stage: build
+  extends: .docker-login
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - |
+      SALEOR_API_URL=$(vault kv get -field=saleor_api_url secret/saleor/storefront)
+    - >
+      docker build
+      --build-arg NEXT_PUBLIC_SALEOR_API_URL="$SALEOR_API_URL"
+      --build-arg NEXT_PUBLIC_STOREFRONT_URL=https://storefront.saleor.example.com
+      -t "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-storefront:$IMAGE_TAG"
+      saleor-storefront/
+    - |
+      docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+        aquasec/trivy:latest image --severity CRITICAL,HIGH --exit-code 1 \
+        "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-storefront:$IMAGE_TAG"
+    - docker push "$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-storefront:$IMAGE_TAG"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes: [saleor-storefront/**/*]
+
+terraform:plan:
+  stage: build
+  extends: .vault-setup
+  image:
+    name: hashicorp/terraform:1.8
+    entrypoint: [""]
+  script:
+    - |
+      export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
+      export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
+    - cd saleor-infrastructure/terraform
+    - |
+      terraform init \
+        -backend-config="bucket=saleor-terraform-state-nguyentanan" \
+        -backend-config="region=us-east-1"
+    - terraform plan -out=tfplan -input=false
+  artifacts:
+    paths: [saleor-infrastructure/terraform/tfplan]
+    expire_in: 1 day
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes: [saleor-infrastructure/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [saleor-infrastructure/**/*]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPLOY — Manual trigger, chỉ chạy trên main
+# ─────────────────────────────────────────────────────────────────────────────
+
+deploy:backend:
+  stage: deploy
+  extends: .vault-setup
+  image:
+    name: amazon/aws-cli:latest
+    entrypoint: [""]
+  environment:
+    name: production
+    url: https://api.saleor.example.com
+  script:
+    - apk add --no-cache kubectl
+    - |
+      export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
+      export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
+    - aws eks update-kubeconfig --name saleor-eks --region us-east-1
+    - >
+      kubectl set image deployment/saleor-backend
+      saleor="$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-backend:$IMAGE_TAG"
+      -n saleor
+    - kubectl rollout status deployment/saleor-backend -n saleor --timeout=5m
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes: [saleor/**/*]
+      when: manual
+
+deploy:dashboard:
+  stage: deploy
+  extends: .vault-setup
+  image:
+    name: amazon/aws-cli:latest
+    entrypoint: [""]
+  environment:
+    name: production
+    url: https://dashboard.saleor.example.com
+  script:
+    - apk add --no-cache kubectl
+    - |
+      export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
+      export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
+    - aws eks update-kubeconfig --name saleor-eks --region us-east-1
+    - >
+      kubectl set image deployment/saleor-dashboard
+      dashboard="$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-dashboard:$IMAGE_TAG"
+      -n saleor
+    - kubectl rollout status deployment/saleor-dashboard -n saleor --timeout=5m
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes: [saleor-dashboard/**/*]
+      when: manual
+
+deploy:storefront:
+  stage: deploy
+  extends: .vault-setup
+  image:
+    name: amazon/aws-cli:latest
+    entrypoint: [""]
+  environment:
+    name: production
+    url: https://storefront.saleor.example.com
+  script:
+    - apk add --no-cache kubectl
+    - |
+      export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
+      export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
+    - aws eks update-kubeconfig --name saleor-eks --region us-east-1
+    - >
+      kubectl set image deployment/saleor-storefront
+      storefront="$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-storefront:$IMAGE_TAG"
+      -n saleor
+    - kubectl rollout status deployment/saleor-storefront -n saleor --timeout=5m
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes: [saleor-storefront/**/*]
+      when: manual
+
+terraform:apply:
+  stage: deploy
+  extends: .vault-setup
+  image:
+    name: hashicorp/terraform:1.8
+    entrypoint: [""]
+  environment:
+    name: production
+  needs: [terraform:plan, checkov]
+  script:
+    - |
+      export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
+      export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
+    - cd saleor-infrastructure/terraform
+    - |
+      terraform init \
+        -backend-config="bucket=saleor-terraform-state-nguyentanan" \
+        -backend-config="region=us-east-1"
+    - terraform apply -auto-approve tfplan
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes: [saleor-infrastructure/**/*]
+      when: manual

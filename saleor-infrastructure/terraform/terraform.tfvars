@@ -1,0 +1,15 @@
+aws_region         = "us-east-1"
+project_name       = "saleor"
+environment        = "production"
+vpc_cidr           = "10.0.0.0/16"
+enable_ipv6        = true
+availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+cluster_name       = "saleor-eks-cluster"
+cluster_version    = "1.32"
+node_instance_type = "t3.small"
+node_desired_size  = 1
+node_min_size      = 1
+node_max_size      = 2
+db_instance_class  = "db.t3.micro"
+db_name            = "saleor"
+db_username        = "saleor_admin"
