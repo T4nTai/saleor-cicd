@@ -11,12 +11,8 @@ variables:
   DOCKER_TLS_CERTDIR: "/certs"
   REGISTRY: ghcr.io
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
-  # Set trong GitLab → Settings → CI/CD → Variables:
-  #   VAULT_ADDR, VAULT_TOKEN, SONAR_HOST_URL
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Hidden jobs
-# ─────────────────────────────────────────────────────────────────────────────
+# Hidden jobs for setup
 
 .vault-setup:
   before_script:
@@ -32,6 +28,7 @@ variables:
         "https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip"
       unzip -qo /tmp/vault.zip -d /usr/local/bin/
       chmod +x /usr/local/bin/vault
+      export VAULT_NAMESPACE="${VAULT_NAMESPACE:-admin}"
 
 .docker-login:
   before_script:
@@ -52,9 +49,7 @@ variables:
       echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" \
         -u "$CI_PROJECT_NAMESPACE" --password-stdin
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SCAN — Không cần external service, chạy trên mọi branch
-# ─────────────────────────────────────────────────────────────────────────────
+# SCAN — Checkov, Trivy filesystem scan
 
 checkov:
   stage: scan
@@ -111,10 +106,7 @@ trivy:storefront:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: [saleor-storefront/**/*]
 
-# ─────────────────────────────────────────────────────────────────────────────
 # AUDIT — Dependency vulnerability scan
-# ─────────────────────────────────────────────────────────────────────────────
-
 pip-audit:
   stage: audit
   image: python:3.12-slim
@@ -159,9 +151,7 @@ audit:storefront:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: [saleor-storefront/pnpm-lock.yaml]
 
-# ─────────────────────────────────────────────────────────────────────────────
 # SAST — SonarQube, graphql-cop, terraform validate
-# ─────────────────────────────────────────────────────────────────────────────
 
 sonarqube:backend:
   stage: sast
@@ -173,6 +163,7 @@ sonarqube:backend:
     - |
       SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
+        -H "X-Vault-Namespace: ${VAULT_NAMESPACE:-admin}" \
         "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
         | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
@@ -180,8 +171,9 @@ sonarqube:backend:
     - >
       sonar-scanner
       -Dsonar.projectKey=saleor-backend
+      -Dsonar.organization="$SONAR_ORG"
       -Dsonar.sources=saleor
-      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.host.url=https://sonarcloud.io
       -Dsonar.login="$SONAR_TOKEN"
       -Dsonar.python.version=3.12
       -Dsonar.exclusions="**/tests/**,**/migrations/**,**/static/**"
@@ -206,6 +198,7 @@ sonarqube:dashboard:
     - |
       SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
+        -H "X-Vault-Namespace: ${VAULT_NAMESPACE:-admin}" \
         "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
         | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
@@ -213,8 +206,9 @@ sonarqube:dashboard:
     - >
       sonar-scanner
       -Dsonar.projectKey=saleor-dashboard
+      -Dsonar.organization="$SONAR_ORG"
       -Dsonar.sources=saleor-dashboard/src
-      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.host.url=https://sonarcloud.io
       -Dsonar.login="$SONAR_TOKEN"
       -Dsonar.javascript.lcov.reportPaths=saleor-dashboard/coverage/lcov.info
       -Dsonar.exclusions="**/*.test.ts,**/*.test.tsx,**/node_modules/**"
@@ -238,6 +232,7 @@ sonarqube:storefront:
     - |
       SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
+        -H "X-Vault-Namespace: ${VAULT_NAMESPACE:-admin}" \
         "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
         | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
@@ -245,8 +240,9 @@ sonarqube:storefront:
     - >
       sonar-scanner
       -Dsonar.projectKey=saleor-storefront
+      -Dsonar.organization="$SONAR_ORG"
       -Dsonar.sources=saleor-storefront/src
-      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.host.url=https://sonarcloud.io
       -Dsonar.login="$SONAR_TOKEN"
       -Dsonar.exclusions="**/*.test.ts,**/*.test.tsx,**/.next/**,**/node_modules/**"
   cache:
@@ -319,9 +315,7 @@ terraform:validate:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: [saleor-infrastructure/**/*]
 
-# ─────────────────────────────────────────────────────────────────────────────
 # BUILD — Docker image + Trivy image scan + terraform plan
-# ─────────────────────────────────────────────────────────────────────────────
 
 build:backend:
   stage: build
@@ -410,10 +404,7 @@ terraform:plan:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: [saleor-infrastructure/**/*]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DEPLOY — Manual trigger, chỉ chạy trên main
-# ─────────────────────────────────────────────────────────────────────────────
-
+# DEPLOY — Manual trigger
 deploy:backend:
   stage: deploy
   extends: .vault-setup
