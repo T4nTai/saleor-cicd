@@ -174,7 +174,7 @@ sonarqube:backend:
       SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
         "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
-        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4)
+        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
   script:
     - >
@@ -207,7 +207,7 @@ sonarqube:dashboard:
       SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
         "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
-        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4)
+        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
   script:
     - >
@@ -239,7 +239,7 @@ sonarqube:storefront:
       SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
         "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
-        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4)
+        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
   script:
     - >
