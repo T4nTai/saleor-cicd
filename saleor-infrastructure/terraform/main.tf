@@ -35,6 +35,16 @@ module "compute" {
   eks_sg_id          = module.security.eks_sg_id
 }
 
+module "devops_tools" {
+  source = "./modules/devops-tools"
+
+  project_name     = var.project_name
+  vpc_id           = module.networking.vpc_id
+  public_subnet_id = module.networking.public_subnet_ids[0]
+  key_name         = var.devops_key_name
+  your_ip_cidr     = var.your_ip_cidr
+}
+
 module "data" {
   source = "./modules/data"
 

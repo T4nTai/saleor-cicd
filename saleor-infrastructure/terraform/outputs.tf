@@ -22,3 +22,15 @@ output "db_endpoint" {
 output "db_secret_arn" {
   value = module.security.db_password_secret_arn
 }
+
+output "sonarqube_url" {
+  value = module.devops_tools.sonarqube_url
+}
+
+output "vault_url" {
+  value = module.devops_tools.vault_url
+}
+
+output "devops_tools_ip" {
+  value = module.devops_tools.public_ip
+}

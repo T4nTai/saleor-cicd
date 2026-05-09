@@ -79,6 +79,18 @@ variable "db_name" {
   default     = "saleor"
 }
 
+variable "devops_key_name" {
+  description = "EC2 Key Pair name cho DevOps tools server"
+  type        = string
+  default     = ""
+}
+
+variable "your_ip_cidr" {
+  description = "IP của bạn để SSH vào EC2, ví dụ: 1.2.3.4/32"
+  type        = string
+  default     = "0.0.0.0/0"
+}
+
 variable "db_username" {
   description = "Database username"
   type        = string

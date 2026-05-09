@@ -31,6 +31,12 @@ resource "aws_db_parameter_group" "postgres" {
     value = "1"
   }
 
+  parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+
   tags = { Name = "${var.project_name}-postgres-params" }
 }
 
@@ -41,7 +47,7 @@ resource "aws_db_instance" "postgres" {
   instance_class    = var.db_instance_class
   allocated_storage = 20
   storage_type      = "gp2"
-  storage_encrypted = false
+  storage_encrypted = true
 
   db_name  = var.db_name
   username = local.db_creds["username"]
@@ -51,7 +57,8 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [var.rds_sg_id]
   parameter_group_name   = aws_db_parameter_group.postgres.name
 
-  backup_retention_period = 0
+  backup_retention_period = 7
+  copy_tags_to_snapshot   = true
   skip_final_snapshot     = true
   multi_az                = false
   publicly_accessible     = false
