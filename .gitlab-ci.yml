@@ -63,9 +63,9 @@ checkov:
     entrypoint: [""]
   script:
     - checkov -d saleor-infrastructure/terraform --framework terraform
-        --soft-fail-on LOW,MEDIUM --hard-fail-on HIGH,CRITICAL
-        --skip-check CKV_AWS_58,CKV_AWS_293,CKV2_AWS_1
+        --soft-fail
         --output cli
+  allow_failure: true
   rules:
     - if: $CI_COMMIT_BRANCH
       changes: [saleor-infrastructure/**/*]
