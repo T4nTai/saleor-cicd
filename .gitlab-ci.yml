@@ -1,3 +1,4 @@
+# pipeline v1.1
 stages:
   - scan
   - audit
