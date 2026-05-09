@@ -133,7 +133,6 @@ audit:dashboard:
   before_script:
     - npm install -g pnpm@10 --quiet
   script:
-    - cd saleor-dashboard && pnpm install --frozen-lockfile
     - cd saleor-dashboard && pnpm audit --audit-level=high || true
   cache:
     key: pnpm-dashboard-$CI_COMMIT_REF_SLUG
@@ -150,7 +149,6 @@ audit:storefront:
   before_script:
     - npm install -g pnpm@9 --quiet
   script:
-    - cd saleor-storefront && pnpm install --frozen-lockfile
     - cd saleor-storefront && pnpm audit --audit-level=high || true
   cache:
     key: pnpm-storefront-$CI_COMMIT_REF_SLUG
