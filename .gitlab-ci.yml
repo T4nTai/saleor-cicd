@@ -271,7 +271,7 @@ graphql-cop:
     DEFAULT_FROM_EMAIL: "ci@test.com"
     DEBUG: "True"
   script:
-    - pip install graphql-cop --quiet
+    - pip install git+https://github.com/dolevf/graphql-cop.git --quiet
     - mkdir -p reports
     - |
       for i in $(seq 1 36); do
