@@ -341,13 +341,13 @@ build:storefront:
   services:
     - docker:24-dind
   script:
-    - echo "NEXT_PUBLIC_SALEOR_API_URL=https://demo.saleor.io/graphql/" > saleor-storefront/.env
-    - >
-      docker build
-      --build-arg NEXT_PUBLIC_SALEOR_API_URL="https://demo.saleor.io/graphql/"
-      --build-arg NEXT_PUBLIC_STOREFRONT_URL=https://storefront.saleor.example.com
-      -t "$CI_REGISTRY_IMAGE/saleor-storefront:$IMAGE_TAG"
-      saleor-storefront/
+    - |
+      echo "NEXT_PUBLIC_SALEOR_API_URL=https://demo.saleor.io/graphql/" > saleor-storefront/.env
+      docker build \
+        --build-arg NEXT_PUBLIC_SALEOR_API_URL=https://demo.saleor.io/graphql/ \
+        --build-arg NEXT_PUBLIC_STOREFRONT_URL=https://storefront.saleor.example.com \
+        -t "$CI_REGISTRY_IMAGE/saleor-storefront:$IMAGE_TAG" \
+        saleor-storefront/
     - |
       docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
         aquasec/trivy:latest image --severity CRITICAL,HIGH --exit-code 0 \
