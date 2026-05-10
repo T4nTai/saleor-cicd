@@ -197,9 +197,8 @@ sonarqube:dashboard:
     - |
       SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
-        -H "X-Vault-Namespace: ${VAULT_NAMESPACE:-admin}" \
         "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
-        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
+        | grep -o '"sonar_token":"[^"]*"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
   script:
     - >
@@ -207,7 +206,7 @@ sonarqube:dashboard:
       -Dsonar.projectKey=saleor-dashboard
       -Dsonar.sources=saleor-dashboard/src
       -Dsonar.host.url=http://18.140.111.117:9000
-      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.token="$SONAR_TOKEN"
       -Dsonar.javascript.lcov.reportPaths=saleor-dashboard/coverage/lcov.info
       -Dsonar.exclusions="**/*.test.ts,**/*.test.tsx,**/node_modules/**"
   cache:
@@ -230,9 +229,8 @@ sonarqube:storefront:
     - |
       SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
-        -H "X-Vault-Namespace: ${VAULT_NAMESPACE:-admin}" \
         "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
-        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
+        | grep -o '"sonar_token":"[^"]*"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
   script:
     - >
@@ -240,7 +238,7 @@ sonarqube:storefront:
       -Dsonar.projectKey=saleor-storefront
       -Dsonar.sources=saleor-storefront/src
       -Dsonar.host.url=http://18.140.111.117:9000
-      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.token="$SONAR_TOKEN"
       -Dsonar.exclusions="**/*.test.ts,**/*.test.tsx,**/.next/**,**/node_modules/**"
   cache:
     key: sonar-storefront
