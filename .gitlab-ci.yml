@@ -171,9 +171,8 @@ sonarqube:backend:
     - >
       sonar-scanner
       -Dsonar.projectKey=saleor-backend
-      -Dsonar.organization="$SONAR_ORG"
       -Dsonar.sources=saleor
-      -Dsonar.host.url=https://sonarcloud.io
+      -Dsonar.host.url=http://18.140.111.117:9000
       -Dsonar.login="$SONAR_TOKEN"
       -Dsonar.python.version=3.12
       -Dsonar.exclusions="**/tests/**,**/migrations/**,**/static/**"
@@ -206,9 +205,8 @@ sonarqube:dashboard:
     - >
       sonar-scanner
       -Dsonar.projectKey=saleor-dashboard
-      -Dsonar.organization="$SONAR_ORG"
       -Dsonar.sources=saleor-dashboard/src
-      -Dsonar.host.url=https://sonarcloud.io
+      -Dsonar.host.url=http://18.140.111.117:9000
       -Dsonar.login="$SONAR_TOKEN"
       -Dsonar.javascript.lcov.reportPaths=saleor-dashboard/coverage/lcov.info
       -Dsonar.exclusions="**/*.test.ts,**/*.test.tsx,**/node_modules/**"
@@ -240,9 +238,8 @@ sonarqube:storefront:
     - >
       sonar-scanner
       -Dsonar.projectKey=saleor-storefront
-      -Dsonar.organization="$SONAR_ORG"
       -Dsonar.sources=saleor-storefront/src
-      -Dsonar.host.url=https://sonarcloud.io
+      -Dsonar.host.url=http://18.140.111.117:9000
       -Dsonar.login="$SONAR_TOKEN"
       -Dsonar.exclusions="**/*.test.ts,**/*.test.tsx,**/.next/**,**/node_modules/**"
   cache:
@@ -419,7 +416,7 @@ deploy:backend:
     - |
       export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
       export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
-    - aws eks update-kubeconfig --name saleor-eks --region us-east-1
+    - aws eks update-kubeconfig --name saleor-eks --region ap-southeast-1
     - >
       kubectl set image deployment/saleor-backend
       saleor="$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-backend:$IMAGE_TAG"
@@ -444,7 +441,7 @@ deploy:dashboard:
     - |
       export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
       export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
-    - aws eks update-kubeconfig --name saleor-eks --region us-east-1
+    - aws eks update-kubeconfig --name saleor-eks --region ap-southeast-1
     - >
       kubectl set image deployment/saleor-dashboard
       dashboard="$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-dashboard:$IMAGE_TAG"
@@ -469,7 +466,7 @@ deploy:storefront:
     - |
       export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
       export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
-    - aws eks update-kubeconfig --name saleor-eks --region us-east-1
+    - aws eks update-kubeconfig --name saleor-eks --region ap-southeast-1
     - >
       kubectl set image deployment/saleor-storefront
       storefront="$REGISTRY/$CI_PROJECT_NAMESPACE/saleor-storefront:$IMAGE_TAG"

@@ -11,7 +11,7 @@ output "cluster_endpoint" {
 }
 
 output "configure_kubectl" {
-  value = "aws eks update-kubeconfig --region us-east-1 --name ${module.compute.cluster_name}"
+  value = "aws eks update-kubeconfig --region ap-southeast-1 --name ${module.compute.cluster_name}"
 }
 
 output "db_endpoint" {

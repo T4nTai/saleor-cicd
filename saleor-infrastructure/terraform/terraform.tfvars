@@ -1,9 +1,9 @@
-aws_region         = "us-east-1"
+aws_region         = "ap-southeast-1"
 project_name       = "saleor"
 environment        = "production"
 vpc_cidr           = "10.0.0.0/16"
 enable_ipv6        = true
-availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+availability_zones = ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
 cluster_name       = "saleor-eks-cluster"
 cluster_version    = "1.32"
 node_instance_type = "t3.small"

@@ -8,16 +8,33 @@ echo "fs.file-max=65536"      >> /etc/sysctl.conf
 
 
 apt-get update -y
-apt-get install -y docker.io docker-compose-plugin curl jq unzip
+apt-get install -y ca-certificates curl gnupg lsb-release jq unzip
+
+# Cài Docker từ repo chính thức
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+  > /etc/apt/sources.list.d/docker.list
+
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
 systemctl enable docker
 systemctl start docker
 usermod -aG docker ubuntu
 
 mkdir -p /opt/devops-tools/vault/config
 mkdir -p /opt/devops-tools/vault/data
+chown -R 100:1000 /opt/devops-tools/vault/config
+chown -R 100:1000 /opt/devops-tools/vault/data
 
 cat > /opt/devops-tools/vault/config/vault.hcl << 'EOF'
 ui = true
+disable_mlock = true
 
 storage "file" {
   path = "/vault/data"
@@ -81,9 +98,9 @@ services:
     cap_add:
       - IPC_LOCK
     volumes:
-      - /opt/devops-tools/vault/config:/vault/config:ro
+      - /opt/devops-tools/vault/config:/vault/config
       - /opt/devops-tools/vault/data:/vault/data
-    command: server -config=/vault/config/vault.hcl
+    entrypoint: ["vault", "server", "-config=/vault/config/vault.hcl"]
 
 volumes:
   sonarqube_data:
