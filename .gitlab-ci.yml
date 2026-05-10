@@ -161,11 +161,14 @@ sonarqube:backend:
     GIT_DEPTH: "0"
   before_script:
     - |
-      SONAR_TOKEN=$(curl -sf \
+      echo "VAULT_ADDR=${VAULT_ADDR}"
+      VAULT_RESPONSE=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
-        -H "X-Vault-Namespace: ${VAULT_NAMESPACE:-admin}" \
-        "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
+        "${VAULT_ADDR}/v1/secret/data/saleor/ci" || echo "CURL_FAILED")
+      echo "VAULT_RESPONSE=${VAULT_RESPONSE}"
+      SONAR_TOKEN=$(echo "$VAULT_RESPONSE" \
         | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
+      echo "SONAR_TOKEN_LENGTH=${#SONAR_TOKEN}"
       export SONAR_TOKEN
   script:
     - >
@@ -173,7 +176,7 @@ sonarqube:backend:
       -Dsonar.projectKey=saleor-backend
       -Dsonar.sources=saleor
       -Dsonar.host.url=http://18.140.111.117:9000
-      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.token="$SONAR_TOKEN"
       -Dsonar.python.version=3.12
       -Dsonar.exclusions="**/tests/**,**/migrations/**,**/static/**"
       -Dsonar.python.coverage.reportPaths=saleor/coverage.xml
