@@ -162,13 +162,10 @@ sonarqube:backend:
   before_script:
     - |
       echo "VAULT_ADDR=${VAULT_ADDR}"
-      VAULT_RESPONSE=$(curl -sf \
+      SONAR_TOKEN=$(curl -sf \
         -H "X-Vault-Token: ${VAULT_TOKEN}" \
-        "${VAULT_ADDR}/v1/secret/data/saleor/ci" || echo "CURL_FAILED")
-      echo "VAULT_RESPONSE=${VAULT_RESPONSE}"
-      SONAR_TOKEN=$(echo "$VAULT_RESPONSE" \
-        | tr ',' '\n' | grep '"sonar_token"' | cut -d'"' -f4 || echo "")
-      echo "SONAR_TOKEN_LENGTH=${#SONAR_TOKEN}"
+        "${VAULT_ADDR}/v1/secret/data/saleor/ci" \
+        | grep -o '"sonar_token":"[^"]*"' | cut -d'"' -f4 || echo "")
       export SONAR_TOKEN
   script:
     - >
@@ -297,14 +294,10 @@ graphql-cop:
 
 terraform:validate:
   stage: sast
-  extends: .vault-setup
   image:
     name: hashicorp/terraform:1.8
     entrypoint: [""]
   script:
-    - |
-      export AWS_ACCESS_KEY_ID=$(vault kv get -field=access_key_id secret/saleor/aws)
-      export AWS_SECRET_ACCESS_KEY=$(vault kv get -field=secret_access_key secret/saleor/aws)
     - cd saleor-infrastructure/terraform
     - terraform init -backend=false
     - terraform validate

@@ -56,5 +56,6 @@ module "data" {
   private_subnet_ids = module.networking.private_subnet_ids
   rds_sg_id          = module.security.rds_sg_id
   db_password_secret = module.security.db_password_secret_arn
+
   depends_on = [module.security]
 }
